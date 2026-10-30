@@ -1,0 +1,1 @@
+{"query":"query NbaLineup($id: ID!) { so5 { taskLineup(id: $id) { id score aasmState taskAppearances { index anyCard { slug } anyPlayer { slug displayName } } } } }","variables":{"id":"22b01911-ec5d-4b93-ad29-11fe64ba58dc"}}

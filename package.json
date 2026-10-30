@@ -1,0 +1,12 @@
+{
+  "name": "nba-optimizer",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Lineup-Optimizer für Sorare NBA Career (aktuelles Set), lokal, nur anonyme Lesezugriffe.",
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node src/cli.mjs",
+    "test": "node --test \"test/*.test.mjs\""
+  }
+}
