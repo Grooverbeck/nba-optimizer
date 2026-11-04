@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// Usage: node src/cli.mjs [--manager luckyphil] [--step 1] [--lineups 3] [--offline data/<file>.json]
+// Usage: node src/cli.mjs [--manager luckyphil] [--step 1] [--lineups 3] [--tage 1] [--offline data/<file>.json]
+// --tage N: only games before 12:00 Berlin N days from today (--tage 1 = tonight).
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -13,10 +14,20 @@ function args(argv) {
   const out = { manager: 'luckyphil' };
   for (let i = 0; i < argv.length; i += 2) {
     const [key, value] = [argv[i].replace(/^--/, ''), argv[i + 1]];
-    if (!['manager', 'step', 'lineups', 'offline'].includes(key) || value == null) throw new Error(`Unbekannte Option: ${argv[i]}`);
-    out[key] = ['step', 'lineups'].includes(key) ? Number(value) : value;
+    if (!['manager', 'step', 'lineups', 'tage', 'offline'].includes(key) || value == null) throw new Error(`Unbekannte Option: ${argv[i]}`);
+    out[key] = ['step', 'lineups', 'tage'].includes(key) ? Number(value) : value;
   }
   return out;
+}
+
+// End of the Nth NBA night: 12:00 Berlin after it (DST-safe). Before 06:00 the running night still counts as tonight.
+export function nightCutoff(days, now = new Date()) {
+  const day = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Berlin', year: 'numeric', month: '2-digit', day: '2-digit' })
+    .format(new Date(now.getTime() - 6 * 3600e3));
+  const noonUtc = new Date(`${day}T12:00:00Z`);
+  noonUtc.setUTCDate(noonUtc.getUTCDate() + days);
+  const hour = Number(new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Berlin', hour: '2-digit', hourCycle: 'h23' }).format(noonUtc));
+  return new Date(noonUtc.getTime() - (hour - 12) * 3600e3);
 }
 
 // Narrow output (max. 40 characters per line) so it fits a phone or a small terminal pane.
@@ -53,19 +64,25 @@ function players(cards) {
 }
 
 function lineupBlock(title, lineup, rules) {
+  const last = lineup.cards.map(c => c.game?.date).filter(Boolean).sort().at(-1);
   return [`== ${title} ==`,
     `${num(lineup.mean)} Pkt · Chance ${pct(lineup.chance)} · ${String(lineup.stars).replace('.', ',')}/${rules.maxStars}★`,
+    ...(last ? [`Letztes Spiel: ${berlin(last)}`] : []),
     ...players(lineup.cards), ''];
 }
 
 export function report(snapshot, options = {}) {
-  const { step, rules, candidates, excluded, inLineups } = buildCandidates(snapshot, options.now);
+  const now = options.now ?? new Date();
+  const { step, rules, candidates: all, excluded, inLineups } = buildCandidates(snapshot, now);
+  const cutoff = options.days ? nightCutoff(options.days, now) : null;
+  const candidates = cutoff ? all.filter(c => Date.parse(c.game.date) < cutoff.getTime()) : all;
   const count = options.lineups ?? step.remainingLineupsCount;
   const plan = planLineups(candidates, rules, step.target, count);
   const lines = [
     `NBA Step ${step.level + 1} · Ziel ${step.target} · ${snapshot.manager}`,
     `Set ${snapshot.set.name} · Stand ${berlin(snapshot.fetchedAt)}`,
     `${snapshot.cards.length} Karten, ${candidates.length} spielbar`,
+    ...(cutoff ? [`Nur Spiele bis ${berlin(cutoff.toISOString())}`, `(${all.length - candidates.length} Karten spielen später)`] : []),
     ...wrap(`Regeln: ${rules.slots} Spieler, max. ${rules.maxStars}★, ${rules.rarities.join('/')}, ${rules.captain ? `Kapitän +${rules.captain * 100} %` : 'kein Kapitän'}, Editionsbonus`),
     '',
   ];
@@ -97,10 +114,10 @@ async function main() {
   }
   const stored = snapshot.steps.find(s => s.id === snapshot.stepId);
   if (opts.offline && opts.step && stored.level !== opts.step - 1) throw new Error(`Die Rohdaten gehören zu Step ${stored.level + 1}.`);
-  const { text, step } = report(snapshot, { lineups: opts.lineups });
+  const { text, step } = report(snapshot, { lineups: opts.lineups, days: opts.tage });
   console.log(text);
   mkdirSync(join(ROOT, 'out'), { recursive: true });
-  const out = join(ROOT, 'out', `step${step.level + 1}-${snapshot.fetchedAt.replace(/[:.]/g, '-')}.txt`);
+  const out = join(ROOT, 'out', `step${step.level + 1}-${snapshot.fetchedAt.replace(/[:.]/g, '-')}${opts.tage ? `-tage${opts.tage}` : ''}.txt`);
   writeFileSync(out, text + '\n');
   console.error(`Gespeichert: ${out}`);
 }

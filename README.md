@@ -9,6 +9,7 @@ Lokal, ohne Abhängigkeiten, nur anonyme Lesezugriffe auf die Sorare-API (kein K
 npm start                        # aktueller Step, so viele Lineups wie noch frei sind
 node src/cli.mjs --step 2        # bestimmter Step
 node src/cli.mjs --lineups 2     # Anzahl Vorschläge
+node src/cli.mjs --tage 1        # nur Spiele bis morgen 12:00 (heute Nacht), --tage 2 = zwei Nächte
 node src/cli.mjs --offline data/<datei>.json   # ohne Sorare, mit gespeicherten Rohdaten
 npm test
 ```
@@ -27,6 +28,7 @@ Ausgabe in der Konsole und in `out/`. Rohdaten landen in `data/`.
 - Erwartete Punkte = Sorare-Prognose für das Spiel × Editionsbonus.
 - Streuung = Standardabweichung der letzten 15 Spiele (mindestens 6 Punkte).
 - Gesucht wird das Lineup mit der höchsten Chance, das Ziel zu erreichen (alle Kombinationen, Sterne-Limit).
+  Vorher fallen Karten weg, die von Karten 5 anderer Spieler geschlagen werden (mehr Punkte, nicht mehr Sterne).
 - Mehrere Lineups: das beste zuerst, dann das beste aus den übrigen Karten, usw.
 - Karten in schon gesetzten Lineups werden nicht vorgeschlagen; das gesetzte Lineup wird mitbewertet.
 - Karten mit Prognose 0 (verletzt, spielt nicht) und Spiele, die schon laufen, fallen raus.

@@ -24,3 +24,13 @@ test('report stays within the narrow width', () => {
   assert.match(text, /@ Timberwolves/);
   assert.match(text, /Spielen wohl nicht \(1\): Ben Simmons/);
 });
+
+test('nightCutoff ends tonight at 12:00 Berlin, also in summer time and during the night', async () => {
+  const { nightCutoff } = await import('../src/cli.mjs');
+  const iso = (n, now) => nightCutoff(n, new Date(now)).toISOString();
+  assert.equal(iso(1, '2026-11-04T16:25:00Z'), '2026-11-05T11:00:00.000Z'); // Wed 17:25 -> Thu 12:00
+  assert.equal(iso(1, '2026-11-04T23:30:00Z'), '2026-11-05T11:00:00.000Z'); // Thu 00:30, night running
+  assert.equal(iso(1, '2026-11-05T09:00:00Z'), '2026-11-06T11:00:00.000Z'); // Thu 10:00 -> Fri 12:00
+  assert.equal(iso(2, '2026-11-04T16:25:00Z'), '2026-11-06T11:00:00.000Z');
+  assert.equal(iso(1, '2026-04-01T16:00:00Z'), '2026-04-02T10:00:00.000Z'); // CEST
+});

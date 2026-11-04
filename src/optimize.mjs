@@ -15,8 +15,20 @@ export function evaluate(cards, target) {
   return { mean, sd, stars, chance: sd > 0 ? normalCdf((mean - target) / sd) : Number(mean >= target) };
 }
 
+// A card beaten (more points, no more stars) by cards of at least `slots` other players is never needed:
+// in any lineup one of them is free to take its place. Keeps the search small for big collections.
+export function undominated(candidates, slots) {
+  return candidates.filter(a => {
+    const better = new Set();
+    for (const b of candidates) {
+      if (b.player !== a.player && b.stars <= a.stars && b.mean >= a.mean && (b.stars < a.stars || b.mean > a.mean)) better.add(b.player);
+    }
+    return better.size < slots;
+  });
+}
+
 export function bestLineup(candidates, { slots, maxStars }, target) {
-  const cards = [...candidates].sort((a, b) => b.mean - a.mean);
+  const cards = undominated(candidates, slots).sort((a, b) => b.mean - a.mean);
   const minStars = Math.min(...cards.map(c => c.stars));
   let best = null, bestZ = -Infinity;
   const pick = [], players = new Set();

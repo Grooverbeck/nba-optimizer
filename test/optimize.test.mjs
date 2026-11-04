@@ -63,3 +63,14 @@ test('edition bonus and exclusions in the model', () => {
   assert.deepEqual(excluded.map(c => c.card).sort(), ['past', 'zero']);
   assert.equal(editionBonuses(step.engineConfiguration).get('divination_shiny_base'), 0.05);
 });
+
+test('cards beaten by five other players are dropped, cheap or strong ones stay', async () => {
+  const { undominated } = await import('../src/optimize.mjs');
+  const pool = [card('a', 2, 30), card('b', 2, 31), card('c', 2, 32), card('d', 2, 33), card('e', 2, 34),
+    card('weak', 2, 20), card('cheap', 1, 18), card('star', 4, 45), card('a2', 2, 50, 8, 'a')];
+  const kept = undominated(pool, 5).map(c => c.card).sort();
+  assert.ok(!kept.includes('weak'));
+  assert.ok(kept.includes('cheap') && kept.includes('star'));
+  // 'weak' is beaten by a2, b, c, d, e (a and a2 are the same player, counted once)
+  assert.equal(undominated(pool.filter(c => c.card !== 'e'), 5).some(c => c.card === 'weak'), true);
+});
