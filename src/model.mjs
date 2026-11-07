@@ -18,6 +18,15 @@ export function stepRules(step) {
   };
 }
 
+// A failed lineup is over: it used up one try, but its cards are free again.
+export function activeLineups(snapshot) {
+  return (snapshot.lineups ?? []).filter(l => l.aasmState !== 'FAILED');
+}
+
+export function failedLineups(snapshot) {
+  return (snapshot.lineups ?? []).filter(l => l.aasmState === 'FAILED');
+}
+
 function spread(scores) {
   if (scores.length < 2) return null;
   const mean = scores.reduce((a, b) => a + b, 0) / scores.length;
@@ -30,7 +39,7 @@ export function buildCandidates(snapshot, now = new Date()) {
   const step = snapshot.steps.find(s => s.id === snapshot.stepId);
   const bonuses = editionBonuses(step.engineConfiguration);
   const byCard = new Map(snapshot.eligibility.map(e => [e.slug, e]));
-  const lineupOf = new Map((snapshot.lineups ?? []).flatMap(l => l.cards.map(slug => [slug, l.id])));
+  const lineupOf = new Map(activeLineups(snapshot).flatMap(l => l.cards.map(slug => [slug, l.id])));
   const candidates = [], excluded = [], inLineups = [];
   for (const card of snapshot.cards) {
     const player = card.basketballPlayer;

@@ -31,6 +31,7 @@ Ausgabe in der Konsole und in `out/`. Rohdaten landen in `data/`.
   Vorher fallen Karten weg, die von Karten 5 anderer Spieler geschlagen werden (mehr Punkte, nicht mehr Sterne).
 - Mehrere Lineups: das beste zuerst, dann das beste aus den übrigen Karten, usw.
 - Karten in schon gesetzten Lineups werden nicht vorgeschlagen; das gesetzte Lineup wird mitbewertet.
+  Ein gescheitertes Lineup kostet einen Versuch, seine Karten sind danach wieder frei.
 - Karten mit Prognose 0 (verletzt, spielt nicht) und Spiele, die schon laufen, fallen raus.
 
 ## Sorare-Abfragen

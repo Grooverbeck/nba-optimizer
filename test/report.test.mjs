@@ -25,6 +25,24 @@ test('report stays within the narrow width', () => {
   assert.match(text, /Spielen wohl nicht \(1\): Ben Simmons/);
 });
 
+test('a failed lineup frees its cards and is listed with its score', () => {
+  const step = { id: 's1', level: 3, target: 240, state: 'LINEUP_SET', remainingLineupsCount: 3,
+    engineConfiguration: { captain: null, specialEditionCards: { editions: [] } },
+    displayedTypedRules: [{ key: 'Scarcity', rarities: ['common'] }, { key: 'AverageScores', averageType: 'STARS', max: 16 },
+      { key: 'Appearances', appearances: [1, 2, 3, 4, 5] }] };
+  const cards = [0, 1, 2, 3, 4, 5].map(i => ({ slug: `c${i}`, cardEditionName: 'divination_standard_base', anyPositions: [],
+    basketballPlayer: { slug: `p${i}`, displayName: `Spieler ${i}`, gameplayTierStars: 3, activeClub: { slug: 'utah-jazz' } } }));
+  const eligibility = cards.map((c, i) => ({ slug: c.slug, basketballPlayer: { rawPlayerGameScores: [30, 40] },
+    eligiblePlayerGameScores: [{ projectedScore: 40 + i, anyGame: { id: `g${i}`, date: '2026-11-08T01:00:00Z', statusTyped: 'scheduled',
+      homeTeam: { slug: 'utah-jazz' }, awayTeam: { slug: 'boston-celtics' } } }] }));
+  const snapshot = { fetchedAt: '2026-11-07T12:00:00Z', manager: 'luckyphil', set: { name: 'Divination' }, stepId: 's1', steps: [step],
+    lineups: [{ id: 'l1', aasmState: 'FAILED', score: 147.8, cards: ['c1', 'c2', 'c3', 'c4', 'c5'] }], cards, eligibility };
+  const { text, plan } = report(snapshot, { now: new Date('2026-11-07T12:00:00Z'), lineups: 1 });
+  assert.match(text, /Nicht geschafft: 147,8 Pkt/);
+  assert.doesNotMatch(text, /Schon gesetzt/);
+  assert.deepEqual(plan.lineups[0].cards.map(c => c.card).sort(), ['c1', 'c2', 'c3', 'c4', 'c5']);
+});
+
 test('nightCutoff ends tonight at 12:00 Berlin, also in summer time and during the night', async () => {
   const { nightCutoff } = await import('../src/cli.mjs');
   const iso = (n, now) => nightCutoff(n, new Date(now)).toISOString();

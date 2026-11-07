@@ -5,7 +5,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { collect } from './collect.mjs';
-import { buildCandidates } from './model.mjs';
+import { activeLineups, buildCandidates, failedLineups } from './model.mjs';
 import { evaluate, planLineups } from './optimize.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -86,7 +86,9 @@ export function report(snapshot, options = {}) {
     ...wrap(`Regeln: ${rules.slots} Spieler, max. ${rules.maxStars}★, ${rules.rarities.join('/')}, ${rules.captain ? `Kapitän +${rules.captain * 100} %` : 'kein Kapitän'}, Editionsbonus`),
     '',
   ];
-  (snapshot.lineups ?? []).forEach((l, i) => {
+  const failed = failedLineups(snapshot);
+  if (failed.length) lines.push(...wrap(`Nicht geschafft: ${failed.map(l => l.score != null ? `${num(l.score)} Pkt` : '?').join(', ')} (Karten wieder frei)`), '');
+  activeLineups(snapshot).forEach((l, i) => {
     const cards = inLineups.filter(c => c.lineup === l.id);
     lines.push(...lineupBlock(`Schon gesetzt ${i + 1}`, { cards, ...evaluate(cards, step.target) }, rules));
   });
