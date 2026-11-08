@@ -16,7 +16,8 @@ const BOARD_QUERY = `query NbaBoard($slug: String!) {
 
 // Anonymous reads find a task lineup only by its bare UUID, not by the "Tasks::TaskLineup:" id.
 const LINEUP_QUERY = `query NbaLineup($id: ID!) {
-  so5 { taskLineup(id: $id) { id score aasmState taskAppearances { index anyCard { slug } } } }
+  so5 { taskLineup(id: $id) { id score aasmState taskAppearances { index anyCard { slug } score
+    game { id date ... on GameOfBasketball { statusTyped } } } } }
 }`;
 
 const CARDS_QUERY = `query NbaCards($slug: String!, $set: String!, $page: Int!) {
@@ -60,7 +61,9 @@ export async function collect({ manager, stepLevel, log = () => {} }) {
     log('Gesetzte Lineups …');
     const data = await query('NbaLineup', LINEUP_QUERY, { id: id.replace(/^.*:/, '') });
     const l = data.so5.taskLineup;
-    lineups.push({ id: l.id, aasmState: l.aasmState, score: l.score, cards: l.taskAppearances.map(a => a.anyCard.slug) });
+    lineups.push({ id: l.id, aasmState: l.aasmState, score: l.score, cards: l.taskAppearances.map(a => a.anyCard.slug),
+      appearances: l.taskAppearances.map(a => ({ card: a.anyCard.slug, score: a.score,
+        game: a.game && { id: a.game.id, date: a.game.date, status: a.game.statusTyped } })) });
   }
 
   log('Karten …');

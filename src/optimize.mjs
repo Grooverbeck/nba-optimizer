@@ -15,27 +15,32 @@ export function evaluate(cards, target) {
   return { mean, sd, stars, chance: sd > 0 ? normalCdf((mean - target) / sd) : Number(mean >= target) };
 }
 
-// A card beaten (more points, no more stars) by cards of at least `slots` other players is never needed:
+// "b beats a": b has no more stars and at least as many points. For the chance search the spread matters too:
+// below the target more spread helps (a lucky night is needed), above the target less spread helps.
+export const beatsOnPoints = (b, a) => b.stars <= a.stars && b.mean >= a.mean && (b.stars < a.stars || b.mean > a.mean);
+const beatsWithSpread = above => (b, a) => b.stars <= a.stars && b.mean >= a.mean && (above ? b.sd <= a.sd : b.sd >= a.sd)
+  && (b.stars < a.stars || b.mean > a.mean || b.sd !== a.sd);
+
+// A card beaten by cards of at least `slots` other players is never needed:
 // in any lineup one of them is free to take its place. Keeps the search small for big collections.
-export function undominated(candidates, slots) {
+export function undominated(candidates, slots, beats = beatsOnPoints) {
   return candidates.filter(a => {
     const better = new Set();
-    for (const b of candidates) {
-      if (b.player !== a.player && b.stars <= a.stars && b.mean >= a.mean && (b.stars < a.stars || b.mean > a.mean)) better.add(b.player);
-    }
+    for (const b of candidates) if (b.player !== a.player && beats(b, a)) better.add(b.player);
     return better.size < slots;
   });
 }
 
-export function bestLineup(candidates, { slots, maxStars }, target) {
-  const cards = undominated(candidates, slots).sort((a, b) => b.mean - a.mean);
+// Exhaustive search over all lineups (one card per player, star cap), keeping the one with the highest value.
+function search(candidates, { slots, maxStars }, value) {
+  const cards = [...candidates].sort((a, b) => b.mean - a.mean);
   const minStars = Math.min(...cards.map(c => c.stars));
-  let best = null, bestZ = -Infinity;
+  let best = null, bestValue = -Infinity;
   const pick = [], players = new Set();
   const walk = (start, mean, variance, stars) => {
     if (pick.length === slots) {
-      const z = (mean - target) / Math.sqrt(variance);
-      if (z > bestZ) { bestZ = z; best = [...pick]; }
+      const v = value(mean, variance);
+      if (v > bestValue) { bestValue = v; best = [...pick]; }
       return;
     }
     const left = slots - pick.length;
@@ -48,6 +53,17 @@ export function bestLineup(candidates, { slots, maxStars }, target) {
     }
   };
   walk(0, 0, 0, 0);
+  return best;
+}
+
+// Highest chance to reach the target. First the most points possible decide whether the target is within reach;
+// that tells which way the spread counts, so the pruning stays exact.
+export function bestLineup(candidates, rules, target) {
+  const top = search(undominated(candidates, rules.slots), rules, mean => mean);
+  if (!top) return null;
+  const above = evaluate(top, target).mean > target;
+  const best = search(undominated(candidates, rules.slots, beatsWithSpread(above)), rules,
+    (mean, variance) => variance > 0 ? (mean - target) / Math.sqrt(variance) : (mean >= target ? Infinity : -Infinity));
   return best && { cards: best, ...evaluate(best, target) };
 }
 

@@ -43,6 +43,34 @@ test('a failed lineup frees its cards and is listed with its score', () => {
   assert.deepEqual(plan.lineups[0].cards.map(c => c.card).sort(), ['c1', 'c2', 'c3', 'c4', 'c5']);
 });
 
+test('a running lineup shows its points so far and only open games count as open', async () => {
+  const { runningLineup } = await import('../src/cli.mjs');
+  const step = { id: 's1', level: 3, target: 240, state: 'LINEUP_SET', remainingLineupsCount: 2,
+    engineConfiguration: { captain: null, specialEditionCards: { editions: [] } },
+    displayedTypedRules: [{ key: 'Scarcity', rarities: ['common'] }, { key: 'AverageScores', averageType: 'STARS', max: 16 },
+      { key: 'Appearances', appearances: [1, 2, 3, 4, 5] }] };
+  const cards = [0, 1, 2, 3, 4].map(i => ({ slug: `c${i}`, cardEditionName: 'divination_standard_base', anyPositions: [],
+    basketballPlayer: { slug: `p${i}`, displayName: `Spieler ${i}`, gameplayTierStars: 3, activeClub: { slug: 'utah-jazz' } } }));
+  const eligibility = cards.map((c, i) => ({ slug: c.slug, basketballPlayer: { rawPlayerGameScores: [30, 40] },
+    eligiblePlayerGameScores: [{ projectedScore: 40, anyGame: { id: `g${i}`, date: '2026-11-09T00:00:00Z', statusTyped: 'scheduled',
+      homeTeam: { slug: 'utah-jazz' }, awayTeam: { slug: 'boston-celtics' } } }] }));
+  const played = (card, score) => ({ card, score, game: { id: 'x', date: '2026-11-08T01:00:00Z', status: 'played' } });
+  const lineup = { id: 'l1', aasmState: 'READY', score: 85.1, cards: ['c0', 'c1', 'c2', 'c3', 'c4'],
+    appearances: [played('c0', 29.7), played('c1', 39.9), played('c2', 15.5), played('c3', 0),
+      { card: 'c4', score: 0, game: { id: 'g4', date: '2026-11-09T00:00:00Z', status: 'scheduled' } }] };
+  const snapshot = { fetchedAt: '2026-11-08T08:00:00Z', manager: 'luckyphil', set: { name: 'Divination' }, stepId: 's1', steps: [step],
+    lineups: [lineup], cards, eligibility };
+  const { text } = report(snapshot, { now: new Date('2026-11-08T08:00:00Z'), lineups: 0 });
+  assert.match(text, /== Läuft 1 ==/);
+  assert.match(text, /85,1 Pkt bisher · noch 1 offen/);
+  assert.match(text, /Chance 0 %/);
+  assert.equal((text.match(/  gespielt/g) ?? []).length, 4);
+  assert.deepEqual(text.split('\n').filter(l => l.length > WIDTH), []);
+  const { buildCandidates } = await import('../src/model.mjs');
+  const r = runningLineup(lineup, buildCandidates(snapshot, new Date('2026-11-08T08:00:00Z')).inLineups, 125);
+  assert.ok(Math.abs(r.mean - 125.1) < 1e-9 && r.chance > 0.5);
+});
+
 test('nightCutoff ends tonight at 12:00 Berlin, also in summer time and during the night', async () => {
   const { nightCutoff } = await import('../src/cli.mjs');
   const iso = (n, now) => nightCutoff(n, new Date(now)).toISOString();

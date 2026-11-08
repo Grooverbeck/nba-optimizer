@@ -74,3 +74,11 @@ test('cards beaten by five other players are dropped, cheap or strong ones stay'
   // 'weak' is beaten by a2, b, c, d, e (a and a2 are the same player, counted once)
   assert.equal(undominated(pool.filter(c => c.card !== 'e'), 5).some(c => c.card === 'weak'), true);
 });
+
+test('a far target keeps a high-spread card the points filter would drop', () => {
+  // Five steady players beat 'wild' on points, but 240 is out of reach, so its spread is what helps.
+  const pool = [...'abcde'.split('').map(id => card(id, 3, 30, 6)), card('wild', 3, 29, 20)];
+  assert.ok(bestLineup(pool, rules, 240).cards.some(c => c.card === 'wild'));
+  // Within reach, the steady five win.
+  assert.ok(!bestLineup(pool, rules, 140).cards.some(c => c.card === 'wild'));
+});

@@ -63,6 +63,27 @@ function players(cards) {
   ]);
 }
 
+// A set lineup: finished games count with their real points, open games with the projection.
+export function runningLineup(lineup, inLineups, target) {
+  const cards = lineup.cards.map(slug => inLineups.find(c => c.card === slug)).filter(Boolean);
+  const done = new Map((lineup.appearances ?? []).filter(a => a.game?.status === 'played').map(a => [a.card, a.score ?? 0]));
+  const open = cards.filter(c => !done.has(c.card));
+  const fixed = [...done.values()].reduce((a, b) => a + b, 0);
+  const rest = evaluate(open, target - fixed);
+  return { cards, done, open, fixed, mean: fixed + rest.mean, chance: rest.chance, stars: cards.reduce((a, c) => a + c.stars, 0) };
+}
+
+function runningBlock(title, r, rules) {
+  const w = Math.max(...r.cards.map(c => c.name.length));
+  const rows = r.cards.flatMap(c => r.done.has(c.card)
+    ? [`${c.name.padEnd(w)} ${stars(c.stars).padStart(5)} ${num(r.done.get(c.card)).padStart(5)}`, '  gespielt']
+    : players([c]).map(line => line.replace(c.name, c.name.padEnd(w))));
+  return [`== ${title} ==`,
+    `${num(r.fixed)} Pkt bisher · noch ${r.open.length} offen`,
+    `Erwartet ${num(r.mean)} · Chance ${pct(r.chance)} · ${String(r.stars).replace('.', ',')}/${rules.maxStars}★`,
+    ...rows, ''];
+}
+
 function lineupBlock(title, lineup, rules) {
   const last = lineup.cards.map(c => c.game?.date).filter(Boolean).sort().at(-1);
   return [`== ${title} ==`,
@@ -89,8 +110,9 @@ export function report(snapshot, options = {}) {
   const failed = failedLineups(snapshot);
   if (failed.length) lines.push(...wrap(`Nicht geschafft: ${failed.map(l => l.score != null ? `${num(l.score)} Pkt` : '?').join(', ')} (Karten wieder frei)`), '');
   activeLineups(snapshot).forEach((l, i) => {
-    const cards = inLineups.filter(c => c.lineup === l.id);
-    lines.push(...lineupBlock(`Schon gesetzt ${i + 1}`, { cards, ...evaluate(cards, step.target) }, rules));
+    const r = runningLineup(l, inLineups, step.target);
+    lines.push(...(r.done.size ? runningBlock(`Läuft ${i + 1}`, r, rules)
+      : lineupBlock(`Schon gesetzt ${i + 1}`, { cards: r.cards, ...evaluate(r.cards, step.target) }, rules)));
   });
   lines.push(`Vorschlag: ${plan.lineups.length} ${inLineups.length ? 'weitere ' : ''}Lineup(s)`, `(noch frei: ${step.remainingLineupsCount})`, '');
   plan.lineups.forEach((l, i) => lines.push(...lineupBlock(`Lineup ${i + 1}`, l, rules)));

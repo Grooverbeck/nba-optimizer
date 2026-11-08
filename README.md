@@ -28,9 +28,11 @@ Ausgabe in der Konsole und in `out/`. Rohdaten landen in `data/`.
 - Erwartete Punkte = Sorare-Prognose für das Spiel × Editionsbonus.
 - Streuung = Standardabweichung der letzten 15 Spiele (mindestens 6 Punkte).
 - Gesucht wird das Lineup mit der höchsten Chance, das Ziel zu erreichen (alle Kombinationen, Sterne-Limit).
-  Vorher fallen Karten weg, die von Karten 5 anderer Spieler geschlagen werden (mehr Punkte, nicht mehr Sterne).
+  Vorher fallen Karten weg, die von Karten 5 anderer Spieler geschlagen werden (mehr Punkte, nicht mehr Sterne,
+  und bei der Streuung nicht schlechter: unter dem Ziel zählt mehr Streuung, über dem Ziel weniger).
 - Mehrere Lineups: das beste zuerst, dann das beste aus den übrigen Karten, usw.
 - Karten in schon gesetzten Lineups werden nicht vorgeschlagen; das gesetzte Lineup wird mitbewertet.
+  Läuft es schon, zählen gespielte Spiele mit ihren echten Punkten, nur offene Spiele mit der Prognose.
   Ein gescheitertes Lineup kostet einen Versuch, seine Karten sind danach wieder frei.
 - Karten mit Prognose 0 (verletzt, spielt nicht) und Spiele, die schon laufen, fallen raus.
 
