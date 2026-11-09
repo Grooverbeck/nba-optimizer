@@ -18,13 +18,19 @@ export function stepRules(step) {
   };
 }
 
-// A failed lineup is over: it used up one try, but its cards are free again.
+// A failed, cancelled or expired lineup is over: it used up one try, but its cards are free again.
+const ENDED = ['FAILED', 'CANCELLED', 'EXPIRED', 'SUCCESSFUL'];
+
 export function activeLineups(snapshot) {
-  return (snapshot.lineups ?? []).filter(l => l.aasmState !== 'FAILED');
+  return (snapshot.lineups ?? []).filter(l => !ENDED.includes(l.aasmState));
 }
 
 export function failedLineups(snapshot) {
   return (snapshot.lineups ?? []).filter(l => l.aasmState === 'FAILED');
+}
+
+export function cancelledLineups(snapshot) {
+  return (snapshot.lineups ?? []).filter(l => ['CANCELLED', 'EXPIRED'].includes(l.aasmState));
 }
 
 function spread(scores) {

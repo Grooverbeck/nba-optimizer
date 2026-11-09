@@ -5,7 +5,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { collect } from './collect.mjs';
-import { activeLineups, buildCandidates, failedLineups } from './model.mjs';
+import { activeLineups, buildCandidates, cancelledLineups, failedLineups } from './model.mjs';
 import { evaluate, planLineups } from './optimize.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -107,8 +107,11 @@ export function report(snapshot, options = {}) {
     ...wrap(`Regeln: ${rules.slots} Spieler, max. ${rules.maxStars}★, ${rules.rarities.join('/')}, ${rules.captain ? `Kapitän +${rules.captain * 100} %` : 'kein Kapitän'}, Editionsbonus`),
     '',
   ];
-  const failed = failedLineups(snapshot);
-  if (failed.length) lines.push(...wrap(`Nicht geschafft: ${failed.map(l => l.score != null ? `${num(l.score)} Pkt` : '?').join(', ')} (Karten wieder frei)`), '');
+  const scores = list => list.map(l => l.score != null ? `${num(l.score)} Pkt` : '?').join(', ');
+  const failed = failedLineups(snapshot), cancelled = cancelledLineups(snapshot);
+  if (failed.length) lines.push(...wrap(`Nicht geschafft: ${scores(failed)}${cancelled.length ? '' : ' (Karten wieder frei)'}`));
+  if (cancelled.length) lines.push(...wrap(`Abgebrochen: ${scores(cancelled)} (Karten wieder frei)`));
+  if (failed.length || cancelled.length) lines.push('');
   activeLineups(snapshot).forEach((l, i) => {
     const r = runningLineup(l, inLineups, step.target);
     lines.push(...(r.done.size ? runningBlock(`Läuft ${i + 1}`, r, rules)

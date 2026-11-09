@@ -41,6 +41,13 @@ test('a failed lineup frees its cards and is listed with its score', () => {
   assert.match(text, /Nicht geschafft: 147,8 Pkt/);
   assert.doesNotMatch(text, /Schon gesetzt/);
   assert.deepEqual(plan.lineups[0].cards.map(c => c.card).sort(), ['c1', 'c2', 'c3', 'c4', 'c5']);
+
+  // A cancelled lineup frees its cards the same way.
+  const cancelled = { ...snapshot, lineups: [{ ...snapshot.lineups[0], aasmState: 'CANCELLED', score: 95 }] };
+  const after = report(cancelled, { now: new Date('2026-11-07T12:00:00Z'), lineups: 1 });
+  assert.match(after.text, /Abgebrochen: 95,0 Pkt\s\(Karten\swieder\sfrei\)/);
+  assert.doesNotMatch(after.text, /Schon gesetzt|Nicht geschafft/);
+  assert.deepEqual(after.plan.lineups[0].cards.map(c => c.card).sort(), ['c1', 'c2', 'c3', 'c4', 'c5']);
 });
 
 test('a running lineup shows its points so far and only open games count as open', async () => {

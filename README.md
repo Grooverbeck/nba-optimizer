@@ -33,7 +33,7 @@ Ausgabe in der Konsole und in `out/`. Rohdaten landen in `data/`.
 - Mehrere Lineups: das beste zuerst, dann das beste aus den übrigen Karten, usw.
 - Karten in schon gesetzten Lineups werden nicht vorgeschlagen; das gesetzte Lineup wird mitbewertet.
   Läuft es schon, zählen gespielte Spiele mit ihren echten Punkten, nur offene Spiele mit der Prognose.
-  Ein gescheitertes Lineup kostet einen Versuch, seine Karten sind danach wieder frei.
+  Ein gescheitertes oder abgebrochenes Lineup kostet einen Versuch, seine Karten sind danach wieder frei.
 - Karten mit Prognose 0 (verletzt, spielt nicht) und Spiele, die schon laufen, fallen raus.
 
 ## Sorare-Abfragen
