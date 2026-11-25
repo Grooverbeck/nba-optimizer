@@ -79,11 +79,17 @@ test('the report recommends how many lineups to set and when', () => {
   const known = report({ ...snapshot, schedule }, { now, days: 1 });
   assert.match(known.text, /== Empfehlung ==\nDas Lineup setzen\.\nNacht auf Di: 2 Spiele, 13 deiner\nKarten, bestes Lineup etwa \d+ %\./);
   assert.deepEqual(known.text.split('\n').filter(l => l.length > WIDTH), []);
-  const owned = cards.map((c, i) => ({ card: c.slug, player: `p${i}`, team: i < 7 ? 'utah-jazz' : 'boston-celtics', stars: 3, projection: i === 0 ? 0 : 40, mean: 40, sd: 8 }));
+  const owned = cards.map((c, i) => ({ card: c.slug, player: `p${i}`, team: i < 7 ? 'utah-jazz' : 'boston-celtics', stars: 3, projection: i === 0 ? 0 : 40, mean: 40, sd: 8, spread: 8, bonus: 0 }));
   const next = nextNightFromSchedule(schedule, owned, { slots: 5, maxStars: 16 }, 180, now);
   // The night after tonight has no game; the one after has two. The card with projection 0 does not count.
   assert.deepEqual({ games: next.games, first: next.first, cards: next.cards }, { games: 2, first: '2026-11-10T01:00:00Z', cards: 12 });
-  assert.ok(next.chance > 0.8);
+  assert.ok(next.chance > 0.6 && next.exact === false);
+  // With Sorare's projections for that night, only the players listed there count, each with that projection.
+  const ahead = [{ id: 'n1', date: '2026-11-10T01:00:00Z', scores: [1, 2, 3, 4, 5, 6].map(i => ({ player: `p${i}`, projectedScore: i === 6 ? 0 : 30 })) },
+    { id: 'tonight', date: '2026-11-08T01:00:00Z', scores: [{ player: 'p9', projectedScore: 60 }] }];
+  const exact = nextNightFromSchedule(schedule, owned, { slots: 5, maxStars: 16 }, 180, now, ahead);
+  assert.deepEqual({ games: exact.games, cards: exact.cards, exact: exact.exact }, { games: 2, cards: 5, exact: true });
+  assert.ok(exact.chance < 0.05);
 });
 
 test('the board for a known next night lies between the small-night and the big-night values', () => {

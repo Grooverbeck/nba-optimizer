@@ -1,3 +1,4 @@
+import { nextScheduledNight } from './nights.mjs';
 import { query } from './sorare.mjs';
 
 // Anonymous queries are limited to depth 7, so the board, cards and eligibility are separate requests.
@@ -45,6 +46,11 @@ const SCHEDULE_QUERY = `query NbaSchedule($slugs: [String!]!) {
 }`;
 const SCHEDULE_BATCH = 15;
 
+// Sorare's projections for every player of one game, also for games several days ahead. One game per request.
+const GAME_QUERY = `query NbaGame($id: ID!) {
+  anyGame(id: $id) { id date playerGameScores { projectedScore anyPlayer { slug } } }
+}`;
+
 export function pickStep(steps, level) {
   if (level != null) {
     const step = steps.find(s => s.level === level - 1);
@@ -55,7 +61,8 @@ export function pickStep(steps, level) {
   return steps.find(s => !['CLAIMED', 'LOCKED'].includes(s.state)) ?? steps.find(s => s.state === 'LOCKED') ?? steps[0];
 }
 
-export async function collect({ manager, stepLevel, log = () => {} }) {
+// `ahead: false` skips the projections for the next night (one request per game of that night).
+export async function collect({ manager, stepLevel, ahead = true, log = () => {} }) {
   log('Board und Regeln …');
   const board = await query('NbaBoard', BOARD_QUERY, { slug: manager });
   const set = board.cardSet.currentSet;
@@ -101,5 +108,15 @@ export async function collect({ manager, stepLevel, log = () => {} }) {
     const data = await query('NbaSchedule', SCHEDULE_QUERY, { slugs: slugs.slice(i, i + SCHEDULE_BATCH) });
     for (const p of data.players) if (p.activeClub) schedule.push({ club: p.activeClub.slug, games: p.activeClub.upcomingGames ?? [] });
   }
-  return { fetchedAt: new Date().toISOString(), manager, set, steps, stepId: step.id, lineups, cards, eligibility, schedule };
+  const snapshot = { fetchedAt: new Date().toISOString(), manager, set, steps, stepId: step.id, lineups, cards, eligibility, schedule };
+  const night = ahead ? nextScheduledNight(schedule) : null;
+  if (!night) return snapshot;
+  log(`Prognosen für die nächste Nacht (${night.games.size} Spiele) …`);
+  snapshot.ahead = [];
+  for (const id of night.games.keys()) {
+    const game = (await query('NbaGame', GAME_QUERY, { id })).anyGame;
+    snapshot.ahead.push({ id: game.id, date: game.date,
+      scores: (game.playerGameScores ?? []).map(s => ({ player: s.anyPlayer?.slug, projectedScore: s.projectedScore })) });
+  }
+  return snapshot;
 }

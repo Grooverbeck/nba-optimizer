@@ -78,14 +78,15 @@ export function buildCandidates(snapshot, now = new Date()) {
     const bonus = bonuses.get(card.cardEditionName) ?? 0;
     const projection = game?.projectedScore ?? 0;
     const g = game?.anyGame;
-    const cal = calibrate(projection, Math.max(spread(played) ?? projection / 3, 6), g ? (Date.parse(g.date) - read) / 3600e3 : Infinity);
+    const base = Math.max(spread(played) ?? projection / 3, 6);
+    const cal = calibrate(projection, base, g ? (Date.parse(g.date) - read) / 3600e3 : Infinity);
     const c = {
       card: card.slug, player: player.slug, name: player.displayName, team: player.activeClub?.slug ?? '?',
       stars: player.gameplayTierStars ?? 0, tier: player.gameplayTier, positions: card.anyPositions,
       edition: card.cardEditionName, bonus, projection,
       game: g ? { id: g.id, date: g.date, status: g.statusTyped, home: g.homeTeam?.slug, away: g.awayTeam?.slug } : null,
       points: projection * (1 + bonus),
-      mean: cal.mean * (1 + bonus), sd: cal.sd * (1 + bonus), out: cal.out,
+      mean: cal.mean * (1 + bonus), sd: cal.sd * (1 + bonus), out: cal.out, spread: base,
       recent: played.length ? played.reduce((a, b) => a + b, 0) / played.length : null,
       playedShare: raw.length ? played.length / raw.length : null,
     };
