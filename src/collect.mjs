@@ -44,7 +44,8 @@ export function pickStep(steps, level) {
     if (!step) throw new Error(`Step ${level} nicht gefunden.`);
     return step;
   }
-  return steps.find(s => ['PLAYABLE', 'LINEUP_SET'].includes(s.state)) ?? steps.find(s => s.state === 'LOCKED') ?? steps[0];
+  // The current step is the first one neither claimed nor locked: PLAYABLE, LINEUP_SET, or LIVE once all tries are set.
+  return steps.find(s => !['CLAIMED', 'LOCKED'].includes(s.state)) ?? steps.find(s => s.state === 'LOCKED') ?? steps[0];
 }
 
 export async function collect({ manager, stepLevel, log = () => {} }) {

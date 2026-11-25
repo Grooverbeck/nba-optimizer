@@ -39,9 +39,31 @@ function spread(scores) {
   return Math.sqrt(scores.reduce((a, b) => a + (b - mean) ** 2, 0) / (scores.length - 1));
 }
 
-// Sorare's projectedScore is the mean. The spread comes from the last 15 games;
-// with little history it falls back to a third of the projection, never below 6 points.
+// Correction from real results: 2,384 player games in the snapshots of 30.10.–25.11.2026, each read
+// up to 30 hours before the game (node src/calibrate.mjs prints these figures from data/).
+// Per projection band: `out` = share that did not play, read up to 6 hours | longer before the game starts;
+// `shift` = how far the scores of those who played sat off the projection, in spreads.
+// `spread` = how much wider the real scores scattered than the spread of the last 15 games.
+export const CALIBRATION = {
+  lateHours: 6,
+  spread: 1.18,
+  bands: [
+    { below: 8, out: [0.39, 0.41], shift: 0.57 },
+    { below: 12, out: [0.12, 0.16], shift: 0.13 },
+    { below: 25, out: [0.032, 0.082], shift: 0 },
+    { below: Infinity, out: [0.013, 0.058], shift: -0.13 },
+  ],
+};
+
+export function calibrate(projection, sd, leadHours, cal = CALIBRATION) {
+  const band = cal.bands.find(b => projection < b.below);
+  return { mean: Math.max(0, projection + band.shift * sd), sd: sd * cal.spread, out: band.out[leadHours <= cal.lateHours ? 0 : 1] };
+}
+
+// `points` is what Sorare shows: projectedScore × edition bonus. The chance uses the corrected `mean`, `sd` and `out`.
+// The spread comes from the last 15 games; with little history it falls back to a third of the projection, never below 6 points.
 export function buildCandidates(snapshot, now = new Date()) {
+  const read = snapshot.fetchedAt ? Date.parse(snapshot.fetchedAt) : now.getTime();
   const step = snapshot.steps.find(s => s.id === snapshot.stepId);
   const bonuses = editionBonuses(step.engineConfiguration);
   const byCard = new Map(snapshot.eligibility.map(e => [e.slug, e]));
@@ -56,13 +78,14 @@ export function buildCandidates(snapshot, now = new Date()) {
     const bonus = bonuses.get(card.cardEditionName) ?? 0;
     const projection = game?.projectedScore ?? 0;
     const g = game?.anyGame;
+    const cal = calibrate(projection, Math.max(spread(played) ?? projection / 3, 6), g ? (Date.parse(g.date) - read) / 3600e3 : Infinity);
     const c = {
       card: card.slug, player: player.slug, name: player.displayName, team: player.activeClub?.slug ?? '?',
       stars: player.gameplayTierStars ?? 0, tier: player.gameplayTier, positions: card.anyPositions,
       edition: card.cardEditionName, bonus, projection,
       game: g ? { id: g.id, date: g.date, status: g.statusTyped, home: g.homeTeam?.slug, away: g.awayTeam?.slug } : null,
-      mean: projection * (1 + bonus),
-      sd: Math.max(spread(played) ?? projection / 3, 6) * (1 + bonus),
+      points: projection * (1 + bonus),
+      mean: cal.mean * (1 + bonus), sd: cal.sd * (1 + bonus), out: cal.out,
       recent: played.length ? played.reduce((a, b) => a + b, 0) / played.length : null,
       playedShare: raw.length ? played.length / raw.length : null,
     };

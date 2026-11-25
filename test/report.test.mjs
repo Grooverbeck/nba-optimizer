@@ -74,8 +74,8 @@ test('a running lineup shows its points so far and only open games count as open
   assert.equal((text.match(/  gespielt/g) ?? []).length, 4);
   assert.deepEqual(text.split('\n').filter(l => l.length > WIDTH), []);
   const { buildCandidates } = await import('../src/model.mjs');
-  const r = runningLineup(lineup, buildCandidates(snapshot, new Date('2026-11-08T08:00:00Z')).inLineups, 125);
-  assert.ok(Math.abs(r.mean - 125.1) < 1e-9 && r.chance > 0.5);
+  const r = runningLineup(lineup, buildCandidates(snapshot, new Date('2026-11-08T08:00:00Z')).inLineups, 120);
+  assert.ok(Math.abs(r.points - 125.1) < 1e-9 && r.chance > 0.5);
 });
 
 test('nightCutoff ends tonight at 12:00 Berlin, also in summer time and during the night', async () => {
@@ -86,4 +86,46 @@ test('nightCutoff ends tonight at 12:00 Berlin, also in summer time and during t
   assert.equal(iso(1, '2026-11-05T09:00:00Z'), '2026-11-06T11:00:00.000Z'); // Thu 10:00 -> Fri 12:00
   assert.equal(iso(2, '2026-11-04T16:25:00Z'), '2026-11-06T11:00:00.000Z');
   assert.equal(iso(1, '2026-04-01T16:00:00Z'), '2026-04-02T10:00:00.000Z'); // CEST
+});
+
+test('a running game counts with its live points and the rest of its projection', async () => {
+  const { runningLineup } = await import('../src/cli.mjs');
+  const step = { id: 's1', level: 3, target: 240, state: 'LIVE', remainingLineupsCount: 0,
+    engineConfiguration: { captain: null, specialEditionCards: { editions: [] } },
+    displayedTypedRules: [{ key: 'Scarcity', rarities: ['common'] }, { key: 'AverageScores', averageType: 'STARS', max: 16 },
+      { key: 'Appearances', appearances: [1, 2, 3, 4, 5] }] };
+  const cards = [0, 1, 2, 3, 4].map(i => ({ slug: `c${i}`, cardEditionName: 'divination_standard_base', anyPositions: [],
+    basketballPlayer: { slug: `p${i}`, displayName: `Spieler ${i}`, gameplayTierStars: 3, activeClub: { slug: 'utah-jazz' } } }));
+  // Sorare already lists the running player's next game; the lineup still holds the running one.
+  const eligibility = cards.map((c, i) => ({ slug: c.slug, basketballPlayer: { rawPlayerGameScores: [30, 40] },
+    eligiblePlayerGameScores: [{ projectedScore: 40, anyGame: { id: `g${i}`, date: '2026-11-12T02:30:00Z', statusTyped: 'scheduled',
+      homeTeam: { slug: 'utah-jazz' }, awayTeam: { slug: 'boston-celtics' } } }] }));
+  const played = (card, score) => ({ card, score, game: { id: 'x', date: '2026-11-10T00:00:00Z', status: 'played' } });
+  const lineup = { id: 'l1', aasmState: 'READY', cards: ['c0', 'c1', 'c2', 'c3', 'c4'],
+    appearances: [played('c0', 70), played('c1', 27),
+      { card: 'c2', score: 30, game: { id: 'y', date: '2026-11-10T01:30:00Z', status: 'playing' } },
+      { card: 'c3', score: 0, game: { id: 'g3', date: '2026-11-12T02:30:00Z', status: 'scheduled' } },
+      { card: 'c4', score: 0, game: { id: 'g4', date: '2026-11-12T02:30:00Z', status: 'scheduled' } }] };
+  const snapshot = { fetchedAt: '2026-11-10T02:45:00Z', manager: 'luckyphil', set: { name: 'Divination' }, stepId: 's1', steps: [step],
+    lineups: [lineup], cards, eligibility };
+  const { text } = report(snapshot, { now: new Date('2026-11-10T02:45:00Z'), lineups: 0 });
+  // 75 of 150 minutes played: live 30 points plus half of the projection 40 still to come.
+  assert.match(text, /127,0 Pkt bisher · 1 läuft · 2 offen/);
+  assert.match(text, /Erwartet 227,0/);
+  assert.match(text, /läuft · Rest ca\. 20,0/);
+  assert.deepEqual(text.split('\n').filter(l => l.length > WIDTH), []);
+  const { buildCandidates } = await import('../src/model.mjs');
+  const { inLineups } = buildCandidates(snapshot, new Date('2026-11-10T02:45:00Z'));
+  const ended = runningLineup(lineup, inLineups, 240, new Date('2026-11-10T05:00:00Z'));
+  assert.equal(ended.live.get('c2').left, 0);
+  assert.ok(Math.abs(ended.points - 207) < 1e-9);
+});
+
+test('the current step is the first one neither claimed nor locked, also while all tries are running', async () => {
+  const { pickStep } = await import('../src/collect.mjs');
+  const steps = [['CLAIMED', 0], ['CLAIMED', 1], ['CLAIMED', 2], ['LIVE', 3], ['LOCKED', 4], ['LOCKED', 5]].map(([state, level]) => ({ state, level }));
+  assert.equal(pickStep(steps).level, 3);
+  assert.equal(pickStep(steps.map(s => s.level === 3 ? { ...s, state: 'LINEUP_SET' } : s)).level, 3);
+  assert.equal(pickStep(steps.map(s => s.level === 3 ? { ...s, state: 'CLAIMED' } : s)).level, 4);
+  assert.equal(pickStep(steps, 5).level, 4);
 });

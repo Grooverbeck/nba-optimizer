@@ -5,7 +5,8 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { collect } from './collect.mjs';
-import { activeLineups, buildCandidates, cancelledLineups, failedLineups } from './model.mjs';
+import { advise, BIG_NIGHT, BOARD, choose, CLOSE } from './advice.mjs';
+import { activeLineups, buildCandidates, CALIBRATION, cancelledLineups, failedLineups } from './model.mjs';
 import { evaluate, planLineups } from './optimize.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -38,7 +39,8 @@ const berlin = iso => {
     .formatToParts(new Date(iso)).map(x => [x.type, x.value]));
   return `${p.weekday.replace('.', '')} ${p.hour}:${p.minute}`;
 };
-const pct = x => `${Math.round(x * 100)} %`;
+// Whole percent; one decimal below 10 %, where the far steps are decided.
+const pct = x => x >= 0.0995 || x < 0.0005 ? `${Math.round(x * 100)} %` : `${(x * 100).toFixed(1).replace('.', ',')} %`;
 const num = x => x.toFixed(1).replace('.', ',');
 const stars = x => `${String(x).replace('.', ',')}★`;
 const teamName = slug => { const w = slug.split('-').pop(); return w[0].toUpperCase() + w.slice(1); };
@@ -58,38 +60,91 @@ function wrap(text) {
 function players(cards) {
   const w = Math.max(...cards.map(c => c.name.length));
   return cards.flatMap(c => [
-    `${c.name.padEnd(w)} ${stars(c.stars).padStart(5)} ${num(c.mean).padStart(5)}`,
+    `${c.name.padEnd(w)} ${stars(c.stars).padStart(5)} ${num(c.points).padStart(5)}`,
     `  ${c.game ? `${berlin(c.game.date)} ${opponent(c)}` : 'kein Spiel'}${c.bonus ? ` · +${Math.round(c.bonus * 100)} %` : ''}`,
   ]);
 }
 
+// An NBA game lasts about 2.5 hours from its listed start.
+export const GAME_HOURS = 2.5;
+
 // A set lineup: finished games count with their real points, open games with the projection.
-export function runningLineup(lineup, inLineups, target) {
+// A running game counts with its live points plus the part of the projection still to come (by elapsed time).
+export function runningLineup(lineup, inLineups, target, at = new Date()) {
   const cards = lineup.cards.map(slug => inLineups.find(c => c.card === slug)).filter(Boolean);
-  const done = new Map((lineup.appearances ?? []).filter(a => a.game?.status === 'played').map(a => [a.card, a.score ?? 0]));
-  const open = cards.filter(c => !done.has(c.card));
-  const fixed = [...done.values()].reduce((a, b) => a + b, 0);
-  const rest = evaluate(open, target - fixed);
-  return { cards, done, open, fixed, mean: fixed + rest.mean, chance: rest.chance, stars: cards.reduce((a, c) => a + c.stars, 0) };
+  const byCard = new Map((lineup.appearances ?? []).map(a => [a.card, a]));
+  const withStatus = status => cards.filter(c => byCard.get(c.card)?.game?.status === status);
+  const done = new Map(withStatus('played').map(c => [c.card, byCard.get(c.card).score ?? 0]));
+  const live = new Map(withStatus('playing').map(c => {
+    const a = byCard.get(c.card), elapsed = (at.getTime() - Date.parse(a.game.date)) / (GAME_HOURS * 3600e3);
+    const left = Math.min(1, Math.max(0, 1 - elapsed));
+    return [c.card, { score: a.score ?? 0, left, rest: { ...c, points: c.points * left, mean: c.mean * left, sd: c.sd * Math.sqrt(left), out: 0 } }];
+  }));
+  const open = cards.filter(c => !done.has(c.card) && !live.has(c.card));
+  const fixed = [...done.values(), ...[...live.values()].map(l => l.score)].reduce((a, b) => a + b, 0);
+  const rest = evaluate([...open, ...[...live.values()].map(l => l.rest)], target - fixed);
+  return { cards, done, live, open, fixed, points: fixed + rest.points, chance: rest.chance, stars: cards.reduce((a, c) => a + c.stars, 0) };
 }
 
 function runningBlock(title, r, rules) {
   const w = Math.max(...r.cards.map(c => c.name.length));
-  const rows = r.cards.flatMap(c => r.done.has(c.card)
-    ? [`${c.name.padEnd(w)} ${stars(c.stars).padStart(5)} ${num(r.done.get(c.card)).padStart(5)}`, '  gespielt']
+  const scored = (c, points, note) => [`${c.name.padEnd(w)} ${stars(c.stars).padStart(5)} ${num(points).padStart(5)}`, `  ${note}`];
+  const rows = r.cards.flatMap(c => r.done.has(c.card) ? scored(c, r.done.get(c.card), 'gespielt')
+    : r.live.has(c.card) ? scored(c, r.live.get(c.card).score,
+      r.live.get(c.card).left > 0 ? `läuft · Rest ca. ${num(r.live.get(c.card).rest.points)}` : 'läuft · gleich vorbei')
     : players([c]).map(line => line.replace(c.name, c.name.padEnd(w))));
   return [`== ${title} ==`,
-    `${num(r.fixed)} Pkt bisher · noch ${r.open.length} offen`,
-    `Erwartet ${num(r.mean)} · Chance ${pct(r.chance)} · ${String(r.stars).replace('.', ',')}/${rules.maxStars}★`,
+    r.live.size ? `${num(r.fixed)} Pkt bisher · ${r.live.size} läuft · ${r.open.length} offen` : `${num(r.fixed)} Pkt bisher · noch ${r.open.length} offen`,
+    `Erwartet ${num(r.points)} · Chance ${pct(r.chance)} · ${String(r.stars).replace('.', ',')}/${rules.maxStars}★`,
     ...rows, ''];
 }
 
 function lineupBlock(title, lineup, rules) {
   const last = lineup.cards.map(c => c.game?.date).filter(Boolean).sort().at(-1);
   return [`== ${title} ==`,
-    `${num(lineup.mean)} Pkt · Chance ${pct(lineup.chance)} · ${String(lineup.stars).replace('.', ',')}/${rules.maxStars}★`,
+    `${num(lineup.points)} Pkt · Chance ${pct(lineup.chance)} · ${String(lineup.stars).replace('.', ',')}/${rules.maxStars}★`,
     ...(last ? [`Letztes Spiel: ${berlin(last)}`] : []),
     ...players(lineup.cards), ''];
+}
+
+// The next night with games, as far as the snapshot shows it: a card only lists its next game,
+// so a game between two teams that both play tonight is missing. The count is a lower bound.
+export function nextNight(cards, now) {
+  for (let n = 2; n <= 8; n++) {
+    const from = nightCutoff(n - 1, now).getTime(), to = nightCutoff(n, now).getTime();
+    const games = new Map(cards.filter(c => c.game && Date.parse(c.game.date) >= from && Date.parse(c.game.date) < to).map(c => [c.game.id, c.game.date]));
+    if (games.size) return { games: games.size, first: [...games.values()].sort()[0] };
+  }
+  return null;
+}
+
+// How many of the planned lineups to set tonight, and when. `won` = chance that a lineup already running wins.
+function adviceBlock(step, plan, won, next, read, candidates) {
+  const tries = Math.min(step.remainingLineupsCount, plan.lineups.length);
+  const chances = [won, ...plan.cumulative.slice(0, tries).map(c => 1 - (1 - won) * (1 - c))];
+  const count = advise(step.level, step.remainingLineupsCount, chances);
+  const say = m => m === 0 ? 'heute nicht setzen' : m === tries ? (m === 1 ? 'das Lineup setzen' : `alle ${m} Lineups setzen`)
+    : m === 1 ? 'nur Lineup 1 setzen' : `Lineup 1 bis ${m} setzen`;
+  const up = text => text[0].toUpperCase() + text.slice(1);
+  const night = next ? `Nacht auf ${berlin(next.first).split(' ')[0]}` : 'nächste Nacht';
+  const big = next && next.games >= BIG_NIGHT;
+  const lines = ['== Empfehlung =='];
+  if (count.small === count.big) lines.push(...wrap(`${up(say(count.big))}.`));
+  else if (big) lines.push(...wrap(`${up(say(count.big))}, den Rest aufheben: Die ${night} hat mind. ${next.games} Spiele.`));
+  else lines.push(...wrap(`Hat die ${night} ${BIG_NIGHT} Spiele oder mehr: ${say(count.big)}. Sonst: ${say(count.small)}.`),
+    ...(next ? wrap(`Sichtbar sind bisher ${next.games} Spiele.`) : []));
+  // Where the next best choice is nearly as good, say so: the board values are rough.
+  const close = (big ? ['big'] : count.small === count.big ? ['big', 'small'] : [])
+    .map(size => choose(step.level, step.remainingLineupsCount, chances, BOARD[size])).find(c => c.margin < CLOSE);
+  if (close) lines.push(...wrap(`Knapp: ${up(say(close.alt))} ist fast gleich gut.`));
+  const most = big ? count.big : Math.max(count.small, count.big);
+  const first = plan.lineups.slice(0, most).flatMap(l => l.cards.map(c => Date.parse(c.game.date))).sort((a, b) => a - b)[0];
+  const late = first - CALIBRATION.lateHours * 3600e3;
+  if (most && late > read) lines.push(...wrap(`Erst ab ${berlin(new Date(late).toISOString())} setzen und vorher neu rechnen: Dann fallen weniger Spieler aus.`));
+  const tips = [...new Set(candidates.map(c => Date.parse(c.game.date)))].sort((a, b) => a - b);
+  const second = tips.find(t => t >= tips[0] + GAME_HOURS * 3600e3);
+  if (step.level === 0 && most && second) lines.push(...wrap(`Tipp: Step 1 nur mit den frühen Spielen setzen, nach Spielende einlösen und Step 2 mit den Spielen ab ${berlin(new Date(second).toISOString())} setzen.`));
+  return { lines: [...lines, ''], count };
 }
 
 export function report(snapshot, options = {}) {
@@ -112,20 +167,25 @@ export function report(snapshot, options = {}) {
   if (failed.length) lines.push(...wrap(`Nicht geschafft: ${scores(failed)}${cancelled.length ? '' : ' (Karten wieder frei)'}`));
   if (cancelled.length) lines.push(...wrap(`Abgebrochen: ${scores(cancelled)} (Karten wieder frei)`));
   if (failed.length || cancelled.length) lines.push('');
+  let lost = 1;
   activeLineups(snapshot).forEach((l, i) => {
-    const r = runningLineup(l, inLineups, step.target);
-    lines.push(...(r.done.size ? runningBlock(`Läuft ${i + 1}`, r, rules)
+    const r = runningLineup(l, inLineups, step.target, new Date(snapshot.fetchedAt));
+    lost *= 1 - r.chance;
+    lines.push(...(r.done.size || r.live.size ? runningBlock(`Läuft ${i + 1}`, r, rules)
       : lineupBlock(`Schon gesetzt ${i + 1}`, { cards: r.cards, ...evaluate(r.cards, step.target) }, rules)));
   });
   lines.push(`Vorschlag: ${plan.lineups.length} ${inLineups.length ? 'weitere ' : ''}Lineup(s)`, `(noch frei: ${step.remainingLineupsCount})`, '');
   plan.lineups.forEach((l, i) => lines.push(...lineupBlock(`Lineup ${i + 1}`, l, rules)));
   if (plan.lineups.length > 1) lines.push(...wrap(`Mindestens eins schafft das Ziel: ${pct(plan.atLeastOne)}`), '');
+  const advice = options.days === 1 && plan.lineups.length
+    ? adviceBlock(step, plan, 1 - lost, nextNight([...all, ...excluded, ...inLineups], now), Date.parse(snapshot.fetchedAt), candidates) : null;
+  if (advice) lines.push(...advice.lines);
   const notPlaying = excluded.filter(c => c.reason.startsWith('Sorare-Prognose 0')).map(c => c.name);
   if (notPlaying.length) lines.push(...wrap(`Spielen wohl nicht (${notPlaying.length}): ${notPlaying.join(', ')}`), '');
   const started = excluded.filter(c => c.reason.startsWith('Spiel läuft')).length;
   if (started) lines.push(...wrap(`${started} Karten weggelassen, ihr Spiel läuft schon.`), '');
-  lines.push(...wrap('Pkt = Sorare-Prognose × Editionsbonus. Chance aus der Streuung der letzten 15 Spiele.'));
-  return { text: lines.join('\n'), plan, step };
+  lines.push(...wrap('Pkt = Sorare-Prognose × Editionsbonus. Chance: mit echten Ergebnissen korrigiert (Ausfälle, Prognose, Streuung).'));
+  return { text: lines.join('\n'), plan, step, advice: advice?.count ?? null };
 }
 
 async function main() {

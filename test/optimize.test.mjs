@@ -29,6 +29,15 @@ test('a player is used once per lineup, and lineups share no card', () => {
   assert.ok(lineups.every(l => l.cards.some(c => c.player === 'x')));
 });
 
+test('lineups that share a player fail together more often than separate ones', async () => {
+  const { atLeastOne } = await import('../src/optimize.mjs');
+  const line = players => { const cards = players.map(p => card(p + Math.random(), 3, 30, 8, p)); return { cards, ...evaluate(cards, 150) }; };
+  const apart = atLeastOne([line(['a', 'b', 'c', 'd', 'e']), line(['f', 'g', 'h', 'i', 'j'])], 150);
+  assert.ok(Math.abs(apart[0] - 0.5) < 1e-6 && Math.abs(apart[1] - 0.75) < 1e-6);
+  const shared = atLeastOne([line(['a', 'b', 'c', 'd', 'e']), line(['a', 'b', 'c', 'd', 'j'])], 150);
+  assert.ok(Math.abs(shared[0] - 0.5) < 1e-6 && shared[1] > 0.52 && shared[1] < 0.7);
+});
+
 test('chance prefers reaching the target over raw points', () => {
   // Same mean, lower spread wins when the mean is above target.
   const safe = evaluate([card('s', 3, 160, 5)], 150).chance;
@@ -57,7 +66,10 @@ test('edition bonus and exclusions in the model', () => {
     ] };
   const { candidates, excluded, inLineups } = buildCandidates(snapshot, new Date('2026-10-30T12:00:00Z'));
   assert.deepEqual(candidates.map(c => c.card), ['shiny']);
-  assert.ok(Math.abs(candidates[0].mean - 21) < 1e-9);
+  assert.ok(Math.abs(candidates[0].points - 21) < 1e-9);
+  // Read 36 hours before the game: the longer-lead absence rate of the 12–25 band, spread widened and with the bonus.
+  assert.equal(candidates[0].out, 0.082);
+  assert.ok(Math.abs(candidates[0].sd - Math.sqrt(200) * 1.18 * 1.05) < 1e-9);
   assert.equal(candidates[0].playedShare, 2 / 3);
   assert.deepEqual(inLineups.map(c => c.card), ['used']);
   assert.deepEqual(excluded.map(c => c.card).sort(), ['past', 'zero']);
