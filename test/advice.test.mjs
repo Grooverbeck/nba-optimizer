@@ -29,16 +29,18 @@ test('how many lineups to set depends on the step and on the next night', () => 
   assert.deepEqual(advise(0, 4, [0, 0.85, 0.95, 0.98, 0.99]), { small: 4, big: 4 });
   // Step 4, 3 tries: before a big night the weak third lineup stays home, before a small one it goes out.
   assert.deepEqual(advise(3, 3, [0, 0.065, 0.10, 0.105]), { small: 3, big: 2 });
-  // Step 3, last try, weak night: wait only if a big night follows.
+  // Step 3, last try, weak night: wait only if a big night follows, and that is a close call.
   assert.deepEqual(advise(2, 1, [0, 0.08]), { small: 1, big: 0 });
-  // Step 5 pays no Gems: get through it in one night.
-  assert.equal(lineupsToSet(4, 4, [0, 0.01, 0.015, 0.017, 0.018], BOARD.big), 4);
-  // A lineup already running that will very likely win makes further tries pointless at Step 3.
-  assert.equal(lineupsToSet(2, 2, [0.97, 0.972, 0.973], BOARD.small), 0);
-  // Step 4, last try, two lineups running: a third with about 2 % is a close call before a big night, a clear one before a small night.
-  const last = [0.098, 0.116];
-  assert.ok(choose(3, 1, last, BOARD.big).margin < 0.1 && choose(3, 1, last, BOARD.big).alt === 0);
-  assert.ok(choose(3, 1, last, BOARD.small).margin > 0.5 && choose(3, 1, last, BOARD.small).count === 1);
+  const close = choose(2, 1, [0, 0.08], BOARD.big);
+  assert.ok(close.margin < 0.1 && close.alt === 1);
+  // Step 4, last try, two lineups running: before a big night the try clearly stays, before a small one it clearly goes.
+  assert.ok(choose(3, 1, [0.098, 0.116], BOARD.big).count === 0 && choose(3, 1, [0.098, 0.116], BOARD.big).margin > 0.5);
+  assert.ok(choose(3, 1, [0.098, 0.116], BOARD.small).count === 1 && choose(3, 1, [0.098, 0.116], BOARD.small).margin > 0.5);
+  // Step 5 pays 100 dollars: on a weak night wait, on a strong night one lineup at a time.
+  assert.deepEqual(advise(4, 4, [0, 0.0036, 0.004, 0.0041, 0.0042]), { small: 0, big: 0 });
+  assert.deepEqual(advise(4, 4, [0, 0.0174, 0.021, 0.023, 0.0239]), { small: 1, big: 1 });
+  // A lineup already running that will very likely win: a try that adds next to nothing stays for the big night.
+  assert.equal(lineupsToSet(3, 2, [0.9, 0.901, 0.902], BOARD.big), 0);
 });
 
 test('the report recommends how many lineups to set and when', () => {

@@ -1,17 +1,27 @@
 // When to set a lineup and when to keep the try for a later night.
 //
+// Every reward counts in Gems:
+// - Step 1 and 2 pay 2,000 and 5,000 common essence. 1,000 essence buy one Bronze pack; for this board
+//   such a pack is worth roughly 0.25 Gems (a rough figure, rescaled from an older estimate).
+// - Step 3 and 4 pay 10 and 30 Gems.
+// - Step 5 and 6 pay 100 and 1,000 dollars. In the shop a Gem costs 13 to 20 cents (25.11.2026);
+//   with 15 cents and 0.90 euros per dollar, a dollar buys 6 Gems.
+export const ESSENCE = 0.25; // Gems per 1,000 essence
+export const DOLLAR = 6; // Gems per dollar
+export const GEMS = [2 * ESSENCE, 5 * ESSENCE, 10, 30, 100 * DOLLAR, 1000 * DOLLAR];
+
 // BOARD[next night][step][tries left] is what the board is worth at the start of the next night with games,
 // in Gems, measured against the average fresh board (Step 1, 4 tries). "big" = BIG_NIGHT games or more.
-// The values come from a nightly decision model over 12 nights (15.–26.11.2026) with the corrected chances
-// and lineups set late. Shards and the dollar prizes of Steps 5 and 6 count as 0, so these steps are only
-// worth getting through quickly. Four failed tries put the board back to Step 1.
+// The values come from a nightly decision model over 12 nights (15.–26.11.2026) with the corrected chances,
+// lineups set late and the rewards above; they have to be recomputed when ESSENCE or DOLLAR change.
+// Four failed tries put the board back to Step 1. The model does not know when the set ends,
+// so it rates long waiting at Steps 5 and 6 a little too well.
 export const BIG_NIGHT = 7;
-export const GEMS = [0, 0, 10, 30, 0, 0];
 export const BOARD = {
-  small: [[0, -0.53, -0.4, -0.36, -0.35], [0, 0.1, 0.47, 0.66, 0.84], [0, 0.23, 1.1, 2, 2.69], [0, -0.68, -0.29, 0.1, 0.49],
-    [0, -1.58, -1.58, -1.58, -1.58], [0, -1.58, -1.58, -1.58, -1.58]],
-  big: [[0, -0.02, 0.17, 0.23, 0.25], [0, 0.67, 1.19, 1.43, 1.57], [0, 1.7, 2.94, 3.67, 4.27], [0, 0.78, 1.67, 2.19, 2.58],
-    [0, -1.58, -1.58, -1.58, -1.58], [0, -1.58, -1.58, -1.58, -1.58]],
+  small: [[0, -0.86, -0.66, -0.6, -0.58], [0, -0.11, 0.42, 0.66, 0.86], [0, -0.19, 0.78, 1.78, 2.58], [0, -0.35, 0.87, 2.32, 3.66],
+    [0, 6.16, 14.35, 22.38, 30.27], [0, 29.49, 60.86, 92.02, 122.98]],
+  big: [[0, -0.02, 0.29, 0.38, 0.41], [0, 0.74, 1.48, 1.84, 2.03], [0, 1.86, 3.47, 4.39, 5.08], [0, 2.65, 4.81, 6.18, 7.41],
+    [0, 10.57, 18.76, 26.8, 34.68], [0, 33.9, 65.27, 96.43, 127.39]],
 };
 
 // A choice is close when the next best one is worth less than this many Gems less.

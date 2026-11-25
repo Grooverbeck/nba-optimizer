@@ -55,7 +55,12 @@ Mit `--tage 1` steht unter den Vorschlägen eine Empfehlung, wie viele Lineups s
 - Grundlage: ein Entscheidungsmodell über 12 Nächte (15.–26.11.2026). Es kennt den Wert des Boards je Step
   und Zahl der freien Versuche, getrennt nach kleiner und großer Folgenacht (groß = ab 7 Spiele).
   Die Werte stehen in `src/advice.mjs`.
-- Gezählt werden nur Gems (10 auf Step 3, 30 auf Step 4). Shards und die Dollar-Preise zählen 0.
+- Alle Belohnungen zählen in Gems: 10 und 30 Gems auf Step 3 und 4 direkt. 1.000 Essenzen (Step 1: 2.000,
+  Step 2: 5.000) zählen grob 0,25 Gems, so viel ist ein Bronze-Pack für dieses Board etwa wert. Ein Dollar
+  (Step 5: 100 $, Step 6: 1.000 $) zählt 6 Gems: Im Shop kostet ein Gem 13 bis 20 Cent, gerechnet ist mit
+  15 Cent und 0,90 € je Dollar. Die Kurse stehen als `ESSENCE` und `DOLLAR` in `src/advice.mjs`.
+- Folge: Auf Step 5 und 6 wartet das Tool auf große Nächte und setzt dann meist nur ein Lineup. Das Modell
+  kennt das Set-Ende nicht und bewertet langes Warten dort etwas zu gut.
 - Vier gescheiterte Versuche setzen das Board auf Step 1 zurück.
 - Die Folgenacht liest das Tool aus den Karten. Jede Karte zeigt nur ihr nächstes Spiel, deshalb ist die
   Zahl der Spiele eine Untergrenze. Ist sie unter 7, nennt das Tool beide Fälle.
