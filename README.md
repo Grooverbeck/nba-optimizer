@@ -67,8 +67,8 @@ Mit `--tage 1` steht unter den Vorschlägen eine Empfehlung, wie viele Lineups s
   für deren Spiele (eine Anfrage je Spiel). Es rechnet, was das beste Lineup aus den eigenen Karten dort
   erreicht, und nimmt Brettwerte zwischen kleiner und großer Nacht, je nachdem, wo diese Chance liegt.
   Bis zu der Nacht ändern sich die Prognosen noch, etwa durch Ausfälle.
-- Der Cloudflare-Worker sammelt die Prognosen der Folgenacht nicht mit (Grenze von 50 Anfragen je Lauf).
-  Für seine Rohdaten steht die aktuelle Prognose der Karte.
+- Rohdaten mit Spielplan, aber ohne diese Prognosen (25.11.2026): Für die Folgenacht steht die aktuelle
+  Prognose der Karte.
 - Rohdaten ohne Spielplan (vor dem 25.11.2026): Die Zahl der Spiele ist dann nur eine Untergrenze. Ist sie
   unter 7, nennt das Tool beide Fälle.
 - „Knapp“ heißt: Die zweitbeste Wahl ist weniger als 0,1 Gems schlechter.
@@ -93,4 +93,5 @@ Damit jede Nacht auswertbar ist, sammelt ein kleiner Cloudflare-Worker die Rohda
 - Keine öffentliche Adresse, kein Key, kein Login. Ein gescheiterter Lauf hinterlässt eine Notiz unter `errors/`.
 - `node src/sync.mjs` holt neue Dateien nach `data/`. Das braucht `npm install` in `worker/` und eine Wrangler-Anmeldung.
 - Deploy: in `worker/` `npm run deploy`. Der Bucket muss vorher bestehen (`wrangler r2 bucket create nba-optimizer-data`).
-- Grenze: Im kostenlosen Worker-Tarif sind 50 Anfragen je Lauf erlaubt. Ab etwa 560 Karten reicht das nicht mehr.
+- Ein Lauf macht bis zu etwa 55 Anfragen (Board, Karten, Form, Spielplan, Prognosen der Folgenacht). Das braucht
+  den bezahlten Worker-Tarif: Im kostenlosen sind 50 Anfragen je Lauf erlaubt.

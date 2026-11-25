@@ -8,9 +8,8 @@ const stamp = iso => iso.replace(/[:.]/g, '-');
 export async function run(env, read = collect) {
   const started = new Date().toISOString();
   try {
-    // Without the projections for the next night: those cost one more request per game,
-    // which would go past the 50 requests a run may make on the free Workers plan.
-    const snapshot = await read({ manager: env.MANAGER, ahead: false });
+    // A run makes about 55 requests on a big night. That needs the paid Workers plan: the free one allows 50.
+    const snapshot = await read({ manager: env.MANAGER });
     await env.DATA.put(`${stamp(snapshot.fetchedAt)}.json`, JSON.stringify(snapshot), { httpMetadata: { contentType: 'application/json' } });
   } catch (e) {
     await env.DATA.put(`errors/${stamp(started)}.txt`, String(e?.stack ?? e));
