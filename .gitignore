@@ -3,3 +3,4 @@ out/
 research/*.response.json
 research/*.requested-at.txt
 node_modules/
+.wrangler/

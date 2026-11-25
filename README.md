@@ -12,6 +12,7 @@ node src/cli.mjs --lineups 2     # Anzahl Vorschläge
 node src/cli.mjs --tage 1        # nur Spiele bis morgen 12:00 (heute Nacht), --tage 2 = zwei Nächte
 node src/cli.mjs --offline data/<datei>.json   # ohne Sorare, mit gespeicherten Rohdaten
 node src/calibrate.mjs           # Korrekturwerte aus den gespeicherten Rohdaten neu ausrechnen
+node src/sync.mjs                # Rohdaten holen, die der Cloudflare-Worker gesammelt hat
 npm test
 ```
 
@@ -71,6 +72,19 @@ Mit `--tage 1` steht unter den Vorschlägen eine Empfehlung, wie viele Lineups s
 
 ## Sorare-Abfragen
 
-Pro Lauf etwa 9 anonyme Anfragen.
+Pro Lauf etwa 40 anonyme Anfragen bei rund 430 Karten (je 50 Karten eine Seite, je 16 Karten eine Abfrage
+für Spiele und Form).
 Anonyme Grenzen: Tiefe 7, Komplexität 500. Deshalb 16 Karten pro Anfrage. Ein gesetztes Lineup ist anonym
 nur über die reine UUID lesbar (`so5.taskLineup`).
+
+## Automatisch sammeln (Cloudflare)
+
+Damit jede Nacht auswertbar ist, sammelt ein kleiner Cloudflare-Worker die Rohdaten auch dann, wenn der PC aus ist.
+
+- Ordner `worker/`, Worker `nba-optimizer-collect`, R2-Bucket `nba-optimizer-data`.
+- Läuft täglich um 21:30 und 09:30 UTC (im Winter 22:30 und 10:30 Berlin): kurz vor den Spielen und nach der Nacht.
+- Liest dieselben anonymen Sorare-Daten wie das Tool und legt sie als eine JSON-Datei ab, mit dem Dateinamen wie in `data/`.
+- Keine öffentliche Adresse, kein Key, kein Login. Ein gescheiterter Lauf hinterlässt eine Notiz unter `errors/`.
+- `node src/sync.mjs` holt neue Dateien nach `data/`. Das braucht `npm install` in `worker/` und eine Wrangler-Anmeldung.
+- Deploy: in `worker/` `npm run deploy`. Der Bucket muss vorher bestehen (`wrangler r2 bucket create nba-optimizer-data`).
+- Grenze: Im kostenlosen Worker-Tarif sind 50 Anfragen je Lauf erlaubt. Ab etwa 560 Karten reicht das nicht mehr.

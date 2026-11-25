@@ -1,0 +1,14 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "nba-optimizer-collect",
+  "main": "src/index.mjs",
+  "compatibility_date": "2026-11-01",
+  // No public address: the Worker only runs on its schedule.
+  "workers_dev": false,
+  "preview_urls": false,
+  // UTC. In winter 21:30 and 09:30 UTC are 22:30 and 10:30 in Berlin: shortly before the games, and after the night.
+  "triggers": { "crons": ["30 21 * * *", "30 9 * * *"] },
+  "vars": { "MANAGER": "luckyphil" },
+  "r2_buckets": [{ "binding": "DATA", "bucket_name": "nba-optimizer-data" }],
+  "observability": { "enabled": true }
+}

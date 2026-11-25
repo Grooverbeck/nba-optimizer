@@ -1,0 +1,14 @@
+{
+  "name": "nba-optimizer-collect",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Cloudflare Worker: speichert zweimal täglich die anonymen Sorare-Rohdaten in R2.",
+  "type": "module",
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "check": "wrangler deploy --dry-run"
+  },
+  "devDependencies": {
+    "wrangler": "^4"
+  }
+}
