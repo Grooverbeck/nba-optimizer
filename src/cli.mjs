@@ -5,9 +5,9 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { collect } from './collect.mjs';
-import { advise, BIG_NIGHT, BOARD, choose, CLOSE } from './advice.mjs';
-import { activeLineups, buildCandidates, CALIBRATION, cancelledLineups, failedLineups } from './model.mjs';
-import { evaluate, planLineups } from './optimize.mjs';
+import { advise, BIG_NIGHT, BOARD, boardFor, choose, CLOSE } from './advice.mjs';
+import { activeLineups, buildCandidates, calibrate, CALIBRATION, cancelledLineups, failedLineups } from './model.mjs';
+import { bestLineup, evaluate, planLineups } from './optimize.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -118,26 +118,55 @@ export function nextNight(cards, now) {
   return null;
 }
 
+// With the clubs' schedules the next night is known exactly: its games, which of the own cards play in it,
+// and roughly what the best lineup reaches there. Sorare projects only a player's next game, so the current
+// projection stands in for that night; cards with projection 0 are left out.
+export function nextNightFromSchedule(schedule, cards, rules, target, now) {
+  for (let n = 2; n <= 8; n++) {
+    const from = nightCutoff(n - 1, now).getTime(), to = nightCutoff(n, now).getTime();
+    const games = new Map(), clubs = new Set();
+    for (const s of schedule) for (const g of s.games) {
+      const start = Date.parse(g.date);
+      if (start >= from && start < to) { games.set(g.id, g.date); clubs.add(s.club); }
+    }
+    if (!games.size) continue;
+    const pool = cards.filter(c => clubs.has(c.team) && c.projection > 0).map(c => ({ ...c, out: calibrate(c.projection, 1, 0).out }));
+    return { games: games.size, first: [...games.values()].sort()[0], cards: pool.length, chance: bestLineup(pool, rules, target)?.chance ?? 0 };
+  }
+  return null;
+}
+
 // How many of the planned lineups to set tonight, and when. `won` = chance that a lineup already running wins.
 function adviceBlock(step, plan, won, next, read, candidates) {
   const tries = Math.min(step.remainingLineupsCount, plan.lineups.length);
   const chances = [won, ...plan.cumulative.slice(0, tries).map(c => 1 - (1 - won) * (1 - c))];
-  const count = advise(step.level, step.remainingLineupsCount, chances);
+  const pick = board => choose(step.level, step.remainingLineupsCount, chances, board);
   const say = m => m === 0 ? 'heute nicht setzen' : m === tries ? (m === 1 ? 'das Lineup setzen' : `alle ${m} Lineups setzen`)
     : m === 1 ? 'nur Lineup 1 setzen' : `Lineup 1 bis ${m} setzen`;
   const up = text => text[0].toUpperCase() + text.slice(1);
   const night = next ? `Nacht auf ${berlin(next.first).split(' ')[0]}` : 'nächste Nacht';
-  const big = next && next.games >= BIG_NIGHT;
   const lines = ['== Empfehlung =='];
-  if (count.small === count.big) lines.push(...wrap(`${up(say(count.big))}.`));
-  else if (big) lines.push(...wrap(`${up(say(count.big))}, den Rest aufheben: Die ${night} hat mind. ${next.games} Spiele.`));
-  else lines.push(...wrap(`Hat die ${night} ${BIG_NIGHT} Spiele oder mehr: ${say(count.big)}. Sonst: ${say(count.small)}.`),
-    ...(next ? wrap(`Sichtbar sind bisher ${next.games} Spiele.`) : []));
+  let count, picks, most;
+  if (next?.chance != null) {
+    // The next night is known from the schedule and rated by the own cards that play in it: one answer.
+    const one = pick(boardFor(step.level, next.chance));
+    count = { small: one.count, big: one.count }; picks = [one]; most = one.count;
+    lines.push(...wrap(`${up(say(one.count))}.`),
+      ...wrap(`${up(night)}: ${next.games} ${next.games === 1 ? 'Spiel' : 'Spiele'}, ${next.cards} deiner Karten, bestes Lineup etwa ${pct(next.chance)}.`));
+  } else {
+    // Older raw data without the schedule: only a lower bound of the next night's games is visible.
+    count = advise(step.level, step.remainingLineupsCount, chances);
+    const big = next && next.games >= BIG_NIGHT;
+    if (count.small === count.big) lines.push(...wrap(`${up(say(count.big))}.`));
+    else if (big) lines.push(...wrap(`${up(say(count.big))}, den Rest aufheben: Die ${night} hat mind. ${next.games} Spiele.`));
+    else lines.push(...wrap(`Hat die ${night} ${BIG_NIGHT} Spiele oder mehr: ${say(count.big)}. Sonst: ${say(count.small)}.`),
+      ...(next ? wrap(`Sichtbar sind bisher ${next.games} Spiele.`) : []));
+    picks = (big ? ['big'] : count.small === count.big ? ['big', 'small'] : []).map(size => pick(BOARD[size]));
+    most = big ? count.big : Math.max(count.small, count.big);
+  }
   // Where the next best choice is nearly as good, say so: the board values are rough.
-  const close = (big ? ['big'] : count.small === count.big ? ['big', 'small'] : [])
-    .map(size => choose(step.level, step.remainingLineupsCount, chances, BOARD[size])).find(c => c.margin < CLOSE);
+  const close = picks.find(c => c.margin < CLOSE);
   if (close) lines.push(...wrap(`Knapp: ${up(say(close.alt))} ist fast gleich gut.`));
-  const most = big ? count.big : Math.max(count.small, count.big);
   const first = plan.lineups.slice(0, most).flatMap(l => l.cards.map(c => Date.parse(c.game.date))).sort((a, b) => a - b)[0];
   const late = first - CALIBRATION.lateHours * 3600e3;
   if (most && late > read) lines.push(...wrap(`Erst ab ${berlin(new Date(late).toISOString())} setzen und vorher neu rechnen: Dann fallen weniger Spieler aus.`));
@@ -177,8 +206,10 @@ export function report(snapshot, options = {}) {
   lines.push(`Vorschlag: ${plan.lineups.length} ${inLineups.length ? 'weitere ' : ''}Lineup(s)`, `(noch frei: ${step.remainingLineupsCount})`, '');
   plan.lineups.forEach((l, i) => lines.push(...lineupBlock(`Lineup ${i + 1}`, l, rules)));
   if (plan.lineups.length > 1) lines.push(...wrap(`Mindestens eins schafft das Ziel: ${pct(plan.atLeastOne)}`), '');
+  const owned = [...all, ...excluded, ...inLineups];
   const advice = options.days === 1 && plan.lineups.length
-    ? adviceBlock(step, plan, 1 - lost, nextNight([...all, ...excluded, ...inLineups], now), Date.parse(snapshot.fetchedAt), candidates) : null;
+    ? adviceBlock(step, plan, 1 - lost, snapshot.schedule ? nextNightFromSchedule(snapshot.schedule, owned, rules, step.target, now) : nextNight(owned, now),
+      Date.parse(snapshot.fetchedAt), candidates) : null;
   if (advice) lines.push(...advice.lines);
   const notPlaying = excluded.filter(c => c.reason.startsWith('Sorare-Prognose 0')).map(c => c.name);
   if (notPlaying.length) lines.push(...wrap(`Spielen wohl nicht (${notPlaying.length}): ${notPlaying.join(', ')}`), '');

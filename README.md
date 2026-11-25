@@ -63,8 +63,12 @@ Mit `--tage 1` steht unter den Vorschlägen eine Empfehlung, wie viele Lineups s
 - Folge: Auf Step 5 und 6 wartet das Tool auf große Nächte und setzt dann meist nur ein Lineup. Das Modell
   kennt das Set-Ende nicht und bewertet langes Warten dort etwas zu gut.
 - Vier gescheiterte Versuche setzen das Board auf Step 1 zurück.
-- Die Folgenacht liest das Tool aus den Karten. Jede Karte zeigt nur ihr nächstes Spiel, deshalb ist die
-  Zahl der Spiele eine Untergrenze. Ist sie unter 7, nennt das Tool beide Fälle.
+- Die Folgenacht kennt das Tool aus dem Spielplan der Teams (2 Anfragen je Lauf). Es schätzt, was das beste
+  Lineup aus den eigenen Karten dort erreicht, und rechnet mit Brettwerten zwischen kleiner und großer Nacht,
+  je nachdem, wo diese Chance liegt. Sorare gibt eine Prognose nur für das nächste Spiel eines Spielers;
+  für die Folgenacht steht deshalb die aktuelle Prognose.
+- Rohdaten ohne Spielplan (vor dem 25.11.2026): Die Zahl der Spiele ist dann nur eine Untergrenze. Ist sie
+  unter 7, nennt das Tool beide Fälle.
 - „Knapp“ heißt: Die zweitbeste Wahl ist weniger als 0,1 Gems schlechter.
 - Liegt das erste Spiel mehr als 6 Stunden entfernt, rät das Tool, später neu zu rechnen: Bis dahin hat Sorare
   die meisten Ausfälle schon auf Prognose 0 gesetzt.

@@ -1,9 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { advise, choose, lineupsToSet, BOARD } from '../src/advice.mjs';
+import { advise, boardFor, choose, lineupsToSet, BOARD } from '../src/advice.mjs';
 import { calibrate } from '../src/model.mjs';
 import { bestLineup, evaluate, normalCdf } from '../src/optimize.mjs';
-import { nextNight, report, WIDTH } from '../src/cli.mjs';
+import { nextNight, nextNightFromSchedule, report, WIDTH } from '../src/cli.mjs';
 
 test('the correction depends on the projection band and on how long before the game it is read', () => {
   const late = calibrate(30, 10, 3), early = calibrate(30, 10, 9);
@@ -69,4 +69,26 @@ test('the report recommends how many lineups to set and when', () => {
   const late = report({ ...snapshot, fetchedAt: '2026-11-07T22:00:00Z' }, { now: new Date('2026-11-07T22:00:00Z'), days: 1 });
   assert.ok(late.plan.lineups[0].chance > plan.lineups[0].chance);
   assert.doesNotMatch(late.text, /Erst ab/);
+
+  // With the clubs' schedules in the raw data the next night is exact and rated by the own cards that play in it.
+  const game = (id, date) => ({ id, date });
+  const schedule = [
+    { club: 'utah-jazz', games: [game('tonight', '2026-11-08T01:00:00Z'), game('n1', '2026-11-10T01:00:00Z')] },
+    { club: 'boston-celtics', games: [game('tonight', '2026-11-08T01:00:00Z'), game('n2', '2026-11-10T02:00:00Z')] },
+  ];
+  const known = report({ ...snapshot, schedule }, { now, days: 1 });
+  assert.match(known.text, /== Empfehlung ==\nDas Lineup setzen\.\nNacht auf Di: 2 Spiele, 13 deiner\nKarten, bestes Lineup etwa \d+ %\./);
+  assert.deepEqual(known.text.split('\n').filter(l => l.length > WIDTH), []);
+  const owned = cards.map((c, i) => ({ card: c.slug, player: `p${i}`, team: i < 7 ? 'utah-jazz' : 'boston-celtics', stars: 3, projection: i === 0 ? 0 : 40, mean: 40, sd: 8 }));
+  const next = nextNightFromSchedule(schedule, owned, { slots: 5, maxStars: 16 }, 180, now);
+  // The night after tonight has no game; the one after has two. The card with projection 0 does not count.
+  assert.deepEqual({ games: next.games, first: next.first, cards: next.cards }, { games: 2, first: '2026-11-10T01:00:00Z', cards: 12 });
+  assert.ok(next.chance > 0.8);
+});
+
+test('the board for a known next night lies between the small-night and the big-night values', () => {
+  assert.deepEqual(boardFor(3, 0.01), BOARD.small);
+  assert.deepEqual(boardFor(3, 0.2), BOARD.big);
+  const mid = boardFor(3, (0.028 + 0.083) / 2);
+  assert.ok(Math.abs(mid[3][2] - (BOARD.small[3][2] + BOARD.big[3][2]) / 2) < 1e-9);
 });

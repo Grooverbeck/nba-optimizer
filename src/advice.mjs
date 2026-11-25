@@ -24,6 +24,17 @@ export const BOARD = {
     [0, 10.57, 18.76, 26.8, 34.68], [0, 33.9, 65.27, 96.43, 127.39]],
 };
 
+// What the best lineup reaches on an average small and big night, per step (the same 12 nights, set late).
+export const NIGHT_CHANCE = { small: [0.817, 0.466, 0.148, 0.028, 0.0036, 0.0007], big: [0.898, 0.621, 0.28, 0.083, 0.0174, 0.0055] };
+
+// The board for a next night of known strength: between the small-night and the big-night values,
+// by where that night's best chance at this step lies between an average small and an average big night.
+export function boardFor(level, chance) {
+  const low = NIGHT_CHANCE.small[level], high = NIGHT_CHANCE.big[level];
+  const weight = Math.min(1, Math.max(0, (chance - low) / (high - low)));
+  return BOARD.small.map((row, k) => row.map((value, t) => (1 - weight) * value + weight * BOARD.big[k][t]));
+}
+
 // A choice is close when the next best one is worth less than this many Gems less.
 export const CLOSE = 0.1;
 

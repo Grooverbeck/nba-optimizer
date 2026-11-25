@@ -38,6 +38,13 @@ const ELIGIBILITY_QUERY = `query NbaEligibility($step: String!, $cards: [String!
 // 24 cards cost 649 complexity points; anonymous limit is 500.
 const BATCH = 16;
 
+// Every club's next games, read through one of its players. 30 players cost 721 complexity points, 15 fit.
+// Three games per club cover the next two nights with games for every club.
+const SCHEDULE_QUERY = `query NbaSchedule($slugs: [String!]!) {
+  players(slugs: $slugs) { slug activeClub { slug upcomingGames(first: 3) { id date } } }
+}`;
+const SCHEDULE_BATCH = 15;
+
 export function pickStep(steps, level) {
   if (level != null) {
     const step = steps.find(s => s.level === level - 1);
@@ -83,5 +90,16 @@ export async function collect({ manager, stepLevel, log = () => {} }) {
     const data = await query('NbaEligibility', ELIGIBILITY_QUERY, { step: step.id, cards: slugs });
     eligibility.push(...data.anyCards);
   }
-  return { fetchedAt: new Date().toISOString(), manager, set, steps, stepId: step.id, lineups, cards, eligibility };
+  log('Spielplan …');
+  const playerOfClub = new Map();
+  for (const c of cards) {
+    const club = c.basketballPlayer?.activeClub?.slug;
+    if (club && !playerOfClub.has(club)) playerOfClub.set(club, c.basketballPlayer.slug);
+  }
+  const schedule = [], slugs = [...playerOfClub.values()];
+  for (let i = 0; i < slugs.length; i += SCHEDULE_BATCH) {
+    const data = await query('NbaSchedule', SCHEDULE_QUERY, { slugs: slugs.slice(i, i + SCHEDULE_BATCH) });
+    for (const p of data.players) if (p.activeClub) schedule.push({ club: p.activeClub.slug, games: p.activeClub.upcomingGames ?? [] });
+  }
+  return { fetchedAt: new Date().toISOString(), manager, set, steps, stepId: step.id, lineups, cards, eligibility, schedule };
 }
