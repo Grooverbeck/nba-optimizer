@@ -64,7 +64,10 @@ test('the report recommends how many lineups to set and when', () => {
   assert.deepEqual(text.split('\n').filter(l => l.length > WIDTH), []);
   assert.equal(report(snapshot, { now }).advice, null);
   const games = eligibility.map(e => ({ game: e.eligiblePlayerGameScores[0].anyGame }));
-  assert.deepEqual(nextNight(games, now), { games: 7, first: '2026-11-09T01:00:00Z' });
+  assert.deepEqual(nextNight(games, now), { games: 7, first: '2026-11-09T01:00:00Z', end: new Date('2026-11-09T11:00:00Z') });
+  // A night is named by the day it ends, also when its first game starts before midnight (Mo 20:00 -> "Nacht auf Di").
+  const evening = [{ club: 'utah-jazz', games: [{ id: 'tonight', date: '2026-11-08T01:00:00Z' }, { id: 'e1', date: '2026-11-09T19:00:00Z' }] }];
+  assert.match(report({ ...snapshot, schedule: evening }, { now, days: 1 }).text, /Nacht auf Di: 1 Spiel,/);
   // Read three hours before the game, fewer players sit out, so the same lineup has a better chance.
   const late = report({ ...snapshot, fetchedAt: '2026-11-07T22:00:00Z' }, { now: new Date('2026-11-07T22:00:00Z'), days: 1 });
   assert.ok(late.plan.lineups[0].chance > plan.lineups[0].chance);

@@ -106,7 +106,7 @@ export function nextNight(cards, now) {
   for (let n = 2; n <= 8; n++) {
     const from = nightCutoff(n - 1, now).getTime(), to = nightCutoff(n, now).getTime();
     const games = new Map(cards.filter(c => c.game && Date.parse(c.game.date) >= from && Date.parse(c.game.date) < to).map(c => [c.game.id, c.game.date]));
-    if (games.size) return { games: games.size, first: [...games.values()].sort()[0] };
+    if (games.size) return { games: games.size, first: [...games.values()].sort()[0], end: new Date(to) };
   }
   return null;
 }
@@ -125,7 +125,7 @@ export function nextNightFromSchedule(schedule, cards, rules, target, now, ahead
     const cal = calibrate(projection, c.spread, 0);
     return [{ ...c, projection, points: projection * (1 + c.bonus), mean: cal.mean * (1 + c.bonus), sd: cal.sd * (1 + c.bonus), out: cal.out }];
   });
-  return { games: night.games.size, first: [...night.games.values()].sort()[0], cards: pool.length,
+  return { games: night.games.size, first: [...night.games.values()].sort()[0], end: night.end, cards: pool.length,
     chance: bestLineup(pool, rules, target)?.chance ?? 0, exact: projected.size > 0 };
 }
 
@@ -137,7 +137,8 @@ function adviceBlock(step, plan, won, next, read, candidates) {
   const say = m => m === 0 ? 'heute nicht setzen' : m === tries ? (m === 1 ? 'das Lineup setzen' : `alle ${m} Lineups setzen`)
     : m === 1 ? 'nur Lineup 1 setzen' : `Lineup 1 bis ${m} setzen`;
   const up = text => text[0].toUpperCase() + text.slice(1);
-  const night = next ? `Nacht auf ${berlin(next.first).split(' ')[0]}` : 'nächste Nacht';
+  // Named by the day the night ends: its first game may start before or after midnight.
+  const night = next ? `Nacht auf ${berlin(next.end.toISOString()).split(' ')[0]}` : 'nächste Nacht';
   const lines = ['== Empfehlung =='];
   let count, picks, most;
   if (next?.chance != null) {

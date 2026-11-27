@@ -10,7 +10,8 @@ export function nightCutoff(days, now = new Date()) {
   return new Date(noonUtc.getTime() - (hour - 12) * 3600e3);
 }
 
-// The first night after tonight that has games: its games (id -> start) and the clubs that play.
+// The first night after tonight that has games: its games (id -> start), the clubs that play,
+// and `end` (12:00 Berlin after it, which names the night: "Nacht auf So").
 // `schedule` = [{ club, games: [{ id, date }] }], as far ahead as it was read.
 export function nextScheduledNight(schedule, now = new Date()) {
   for (let n = 2; n <= 8; n++) {
@@ -20,7 +21,7 @@ export function nextScheduledNight(schedule, now = new Date()) {
       const start = Date.parse(g.date);
       if (start >= from && start < to) { games.set(g.id, g.date); clubs.add(s.club); }
     }
-    if (games.size) return { games, clubs };
+    if (games.size) return { games, clubs, end: new Date(to) };
   }
   return null;
 }
